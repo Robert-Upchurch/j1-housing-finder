@@ -831,6 +831,11 @@
         <label>&#x1F4CD; Work Address</label>
         <input type="text" id="work-address" placeholder="Enter restaurant, hotel, or employer address..." onkeydown="if(event.key==='Enter') calcDistances()">
         <button class="btn-search" onclick="calcDistances()">Calculate Distances</button>
+        <div class="radius-group" id="radius-group" style="opacity:0.4;pointer-events:none;">
+            <label>Radius</label>
+            <input type="range" class="radius-slider" id="radius-slider" min="0" max="15" value="15" oninput="updateRadius(this.value)">
+            <span class="radius-value" id="radius-value">15 mi</span>
+        </div>
         <div class="distance-result" id="distance-result"></div>
     </div>
 
