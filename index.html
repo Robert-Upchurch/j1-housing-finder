@@ -354,6 +354,14 @@
             border-radius: 50%;
         }
 
+        /* ===== RADIUS SLIDER ===== */
+        .radius-group { display: flex; align-items: center; gap: 0.5rem; white-space: nowrap; }
+        .radius-group label { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); }
+        .radius-slider { -webkit-appearance: none; appearance: none; width: 120px; height: 6px; border-radius: 3px; background: var(--bg-tertiary); outline: none; cursor: pointer; }
+        .radius-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--primary); cursor: pointer; box-shadow: 0 2px 6px rgba(99,102,241,0.4); }
+        .radius-slider::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--primary); cursor: pointer; border: none; }
+        .radius-value { font-size: 0.85rem; font-weight: 600; color: var(--primary); min-width: 55px; }
+
         /* ===== WORK ADDRESS DISTANCE BAR ===== */
         .distance-bar {
             background: var(--bg-secondary);
@@ -1152,7 +1160,15 @@ function applyFilters() {
         if (internet === 'not-included' && l.utilities.internet) return false;
         if (electric === 'included' && !l.utilities.electric) return false;
         if (electric === 'not-included' && l.utilities.electric) return false;
-        return true;
+        // Radius filter
+            if (workCoords) {
+                const maxDist = parseInt(document.getElementById('radius-slider').value);
+                if (maxDist < 15) {
+                    const dist = getDist(l.lat, l.lng);
+                    if (dist > maxDist) return false;
+                }
+            }
+            return true;
     });
 
     // Sort
@@ -1301,14 +1317,26 @@ function calcDistances() {
                 `<span class="distance-chip">ð Distances shown on cards</span>` +
                 `<span class="distance-chip">ð ~${Math.round(getTime(filteredListings[0]?.lat || workCoords.lat, filteredListings[0]?.lng || workCoords.lng) * 1.5)} min transit avg</span>`;
 
-            applyFilters(); // Re-render with distances
+            enableRadiusSlider();
+                    applyFilters(); // Re-render with distances
         })
         .catch(() => {
             document.getElementById('distance-result').innerHTML = '<span style="color:var(--danger)">Geocoding error. Please try again.</span>';
         });
 }
 
-// ===== STATS =====
+// ===== RADIUS SLIDER =====
+        function updateRadius(val) {
+            document.getElementById('radius-value').textContent = val == 15 ? '15 mi' : val + ' mi';
+            applyFilters();
+        }
+        function enableRadiusSlider() {
+            const rg = document.getElementById('radius-group');
+            rg.style.opacity = '1';
+            rg.style.pointerEvents = 'auto';
+        }
+
+        // ===== STATS =====
 function updateStats() {
     document.getElementById('stat-listings').textContent = filteredListings.length;
     const cities = new Set(filteredListings.map(l => l.city));
