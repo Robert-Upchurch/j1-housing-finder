@@ -828,13 +828,15 @@
 
     <!-- WORK ADDRESS DISTANCE BAR -->
     <div class="distance-bar">
-        <label>&#x1F4CD; Work Address</label>
-        <input type="text" id="work-address" placeholder="Enter restaurant, hotel, or employer address..." onkeydown="if(event.key==='Enter') calcDistances()">
-        <button class="btn-search" onclick="calcDistances()">Calculate Distances</button>
+        <label>&#x1F3E0; Living Address</label>
+        <input type="text" id="living-address" placeholder="Desired living area or home address..." onkeydown="if(event.key==='Enter') calcAllDistances()">
+        <label>&#x1F4BC; Work Address</label>
+        <input type="text" id="work-address" placeholder="Restaurant, hotel, or employer address..." onkeydown="if(event.key==='Enter') calcAllDistances()">
+        <button class="btn-search" onclick="calcAllDistances()">Calculate Distances</button>
         <div class="radius-group" id="radius-group" style="opacity:0.4;pointer-events:none;">
             <label>Radius</label>
-            <input type="range" class="radius-slider" id="radius-slider" min="0" max="15" value="15" oninput="updateRadius(this.value)">
-            <span class="radius-value" id="radius-value">15 mi</span>
+            <input type="range" class="radius-slider" id="radius-slider" min="1" max="25" value="25" oninput="updateRadius(this.value)">
+            <span class="radius-value" id="radius-value">25 mi</span>
         </div>
         <div class="distance-result" id="distance-result"></div>
     </div>
@@ -992,7 +994,7 @@ const ALL_LISTINGS = [
 ];
 
 // ===== STATE =====
-let map, markers = [], workMarker = null, workCoords = null;
+let map, markers = [], workMarker = null, workCoords = null, livingMarker = null, livingCoords = null;
 let filteredListings = [...ALL_LISTINGS];
 let activeSource = 'all';
 let selectedListingId = null;
@@ -1166,9 +1168,9 @@ function applyFilters() {
         if (electric === 'included' && !l.utilities.electric) return false;
         if (electric === 'not-included' && l.utilities.electric) return false;
         // Radius filter
-            if (workCoords) {
+            if (livingCoords || workCoords) {
                 const maxDist = parseInt(document.getElementById('radius-slider').value);
-                if (maxDist < 15) {
+                if (maxDist < 25) {
                     const dist = getDist(l.lat, l.lng);
                     if (dist > maxDist) return false;
                 }
@@ -1180,7 +1182,7 @@ function applyFilters() {
     if (sort === 'price-asc') filteredListings.sort((a, b) => a.price - b.price);
     else if (sort === 'price-desc') filteredListings.sort((a, b) => b.price - a.price);
     else if (sort === 'beds-desc') filteredListings.sort((a, b) => b.beds - a.beds);
-    else if (sort === 'distance' && workCoords) {
+    else if (sort === 'distance' && (livingCoords || workCoords)) {
         filteredListings.sort((a, b) => getDist(a.lat, a.lng) - getDist(b.lat, b.lng));
     }
 
@@ -1277,11 +1279,12 @@ function selectListing(id) {
 
 // ===== DISTANCE CALC =====
 function getDist(lat, lng) {
-    if (!workCoords) return 999;
+    const center = livingCoords || workCoords;
+    if (!center) return 999;
     const R = 3958.8; // Earth radius in miles
-    const dLat = (lat - workCoords.lat) * Math.PI / 180;
-    const dLng = (lng - workCoords.lng) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2 + Math.cos(workCoords.lat * Math.PI / 180) * Math.cos(lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+    const dLat = (lat - center.lat) * Math.PI / 180;
+    const dLng = (lng - center.lng) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(center.lat * Math.PI / 180) * Math.cos(lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 1.3; // 1.3x for road vs straight line
 }
 
@@ -1290,7 +1293,36 @@ function getTime(lat, lng) {
     return Math.round(miles * 2.5); // ~24 mph average city driving
 }
 
-function calcDistances() {
+// ===== DUAL ADDRESS GEOCODING =====
+        function calcLivingDistance() {
+            const address = document.getElementById('living-address').value.trim();
+            if (!address) return Promise.resolve();
+            return fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.length === 0) return;
+                    livingCoords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+                    if (livingMarker) map.removeLayer(livingMarker);
+                    const livingIcon = L.divIcon({
+                        className: 'living-marker',
+                        html: `<div style="font-size:26px;color:#10b981;text-shadow:0 2px 6px rgba(0,0,0,0.5);line-height:1;">\u{1F3E0}</div>`,
+                        iconSize: [26, 26],
+                        iconAnchor: [13, 13]
+                    });
+                    livingMarker = L.marker([livingCoords.lat, livingCoords.lng], { icon: livingIcon }).addTo(map).bindPopup(`<b>Living Area</b><br>${address}`);
+                });
+        }
+        function calcAllDistances() {
+            const work = document.getElementById('work-address').value.trim();
+            const living = document.getElementById('living-address').value.trim();
+            if (!work && !living) return;
+            Promise.all([
+                work ? new Promise(resolve => { calcDistances(); setTimeout(resolve, 1500); }) : Promise.resolve(),
+                living ? calcLivingDistance() : Promise.resolve()
+            ]).then(() => { enableRadiusSlider(); applyFilters(); });
+        }
+
+        function calcDistances() {
     const address = document.getElementById('work-address').value.trim();
     if (!address) return;
 
@@ -1332,7 +1364,7 @@ function calcDistances() {
 
 // ===== RADIUS SLIDER =====
         function updateRadius(val) {
-            document.getElementById('radius-value').textContent = val == 15 ? '15 mi' : val + ' mi';
+            document.getElementById('radius-value').textContent = val + ' mi';
             applyFilters();
         }
         function enableRadiusSlider() {
